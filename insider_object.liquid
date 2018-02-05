@@ -1,0 +1,257 @@
+<script>
+/*
+* Insider object integration
+*/
+var breadcrumb = [
+  // Home
+  {% if template.name == 'index' %}
+    'home',
+  {% endif %}
+  // General template directory
+  {% if template.directory %} '{{ template.directory }}',{% endif %}
+  // General template suffix
+  {% if template.suffix and template.name != 'collection' %} '{{ template.suffix }}',{%endif%}
+  // Product
+  {% if template.name == 'product' %}
+      {% for collection in product.collections %}
+        '{{ collection.title }}',
+    {% endfor %}
+  {% endif %}
+  // Collection
+  {% if template.name == 'collection' %}      
+    {% assign collectionURL = canonical_url | split: '/collections/' %}
+    {% for urlPart in collectionURL %}
+      {% if forloop.last == true %}
+      {% assign subCollections=urlPart | split: '/' %}
+        {% for sub in subCollections %}
+          '{{sub}}',
+        {% endfor %}
+      {%endif%}
+    {% endfor %}
+  {% endif %}
+  // Search
+  {% if template.name == 'page' and page.title == 'Search Results' %}
+  	'search'
+  {%endif%}
+  // Checkout
+  {% if checkout.id %}
+    'confirmation'
+  {%endif%}  
+];
+
+var taxonomy=[
+  {% for collection in product.collections %}
+    '{{collection.title}}',
+  {% endfor %}
+];
+
+var options = {
+  id: [
+    {% for variant in product.variants %}
+      '{{ variant.id }}',
+    {% endfor %}
+  ],
+  names: [
+    {% for option in product.options %}
+      '{{ option }}',
+    {% endfor %}
+  ],
+  color: [
+    {% for option in product.options_with_values %}
+      {%if option.name == 'COLOR'%}
+        {%for value in option.values %}
+          '{{ value }}',
+        {%endfor%}
+      {%endif %}
+    {% endfor %}
+  ],
+  size: [
+    {% for option in product.options_with_values %}
+      {%if option.name == 'SIZE'%}
+        {%for value in option.values %}
+          '{{ value }}',
+        {%endfor%}
+      {%endif%}
+    {% endfor %}
+  ]
+};
+
+var variants={
+  stock:[
+    {%for variant in product.variants%}
+      {%if variant.available%}
+        {{variant.inventory_quantity}},
+      {%endif%}
+    {%endfor%}
+  ]
+};
+
+var images={
+  normal:[
+    {% for image in product.images %}
+      '{{ image.src }}',
+    {% endfor %}
+  ],
+  feature: 'https:{{ product | img_url:'300x' }}'
+};
+
+var currencyRe=/(^<\/?.*>)(\D+)(\s\W{1})(.*)(<\/.*>)/;
+var currency='{{product.price  | money_with_currency}}'.split(currencyRe);
+var salePrice='{{ product.price_min  | money_with_currency }}'.split(currencyRe)[4];
+var product={
+  {%if product.id %}
+    "id": '{{product.id}}',
+    "option_id": options.id,
+    "name": '{{ product.title }}',
+    "taxonomy": taxonomy,
+    "currency": currency[2],
+    "unit_price": currency[4],     
+    "unit_sale_price": salePrice,     
+    "url": '{{ product.url }}',
+    "stock":variants.stock,
+    "color":options.color,
+    "size":options.size,
+    "product_image_url": images.feature
+  {%else%}
+    "id":'N/A'
+  {%endif%}
+};
+
+var user={
+  {%if customer.id%}
+    "user_id": '{{customer.id}}',
+    "has_transacted": {%if customer.orders_count > 0%}true{%else%}false{%endif%},
+    "transaction_count": {{customer.orders_count}},
+    "name": '{{customer.name}}',
+    "surname": '{{customer.last_name}}',
+    "username": '{{customer.first_name}}',
+    "email": '{{customer.email}}'
+  {%else%}
+    "user_id":'N/A'
+  {%endif%}
+};
+
+var discountPrice={%if discount.total_amount >0%}parseFloat('{{discount.total_amount | money_with_currency}}'.split(currencyRe)[4]){%else%}0{%endif%};
+var totalPrice = parseFloat('{{cart.total_price | money_with_currency}}'.split(currencyRe)[4]);
+var cartCurrency='{{{cart.total_price | money_with_currency}}'.split(currencyRe)[2];
+var discountRatio=discountPrice/totalPrice;
+var cartItems=[
+	{%for item in cart.items%}
+	{
+	  "product":{
+        "id": '{{item.id}}',
+        "name": '{{ item.title }}',
+        "taxonomy": [{% for collection in item.product.collections %}
+                      '{{collection.title}}',
+                     {% endfor %}],
+        "currency": cartCurrency,
+        "unit_price": parseFloat('{{item.original_price | money_with_currency}}'.split(currencyRe)[4]),
+        "unit_sale_price": parseFloat('{{item.price | money_with_currency}}'.split(currencyRe)[4]),
+        "url": '{{ item.url }}',
+        "stock":'{{item.variant.inventory_quantity}}',
+        "color": '{{item.variant.option1}}',
+        "size":'{{item.variant.option2}}',
+        "product_image_url": '{{ item.image | img_url: '300x'}}'
+      },
+      "quantity":'{{item.quantity}}',
+      "subtotal":parseFloat('{{item.line_price | money_with_currency}}'.split(currencyRe)[4])
+	},
+	{%endfor%}
+];
+
+var basket={
+  "currency": cartCurrency,
+  "total": totalPrice,
+  "vouchers": '{{discount.code}}', //Optional
+  "voucher_discount": discountPrice, //Optional
+  "voucher_discount_ratio": discountRatio, //Optional
+  "promotions": '{{discount.code}}', //Optional
+  "promotion_discount": discountPrice, //Optional
+  "promotion_discount_ratio": discountRatio, //Optional
+  "line_items": cartItems
+};
+
+var transaction={
+  "order_id":"",
+  "currency": "USD",
+  "total":"",
+  "line_items": [
+    {
+      "product": {
+
+      },
+      "quantity":"",
+      "subtotal":""
+    }
+  ]
+};
+  
+var listing={
+  "items":[
+    {% if template.name == 'collection' %}      
+      {% for product in collection.products %}
+        {
+          "id": '{{product.id}}',
+          "option_id": [
+            {% for variant in product.variants %}
+              '{{ variant.id }}',
+            {% endfor %}
+          ],
+          "name": '{{ product.title }}',
+          "taxonomy": [
+          	{% for tag in product.tags %}
+              '{{tag}}',
+            {% endfor %}
+          ],
+          "currency": '{{product.price  | money_with_currency}}'.split(currencyRe)[2],
+          "unit_price": '{{product.price  | money_with_currency}}'.split(currencyRe)[4],     
+          "unit_sale_price": '{{ product.price_min  | money_with_currency }}'.split(currencyRe)[4]
+        },
+      {%endfor%}
+    {%endif%}
+  ]
+};
+
+var orderItems=[
+  {%for item in checkout.line_items%}
+  {
+    "product":{
+        "id": '{{item.id}}',
+        "name": '{{ item.title }}',
+        "taxonomy": [{% for collection in item.product.collections %}
+                      '{{collection.title}}',
+                     {% endfor %}],
+        "currency": cartCurrency,
+        "unit_price": parseFloat('{{item.original_price | money_with_currency}}'.split(currencyRe)[4]),
+        "unit_sale_price": parseFloat('{{item.price | money_with_currency}}'.split(currencyRe)[4]),
+        "url": '{{ item.url }}',
+        "stock":'{{item.variant.inventory_quantity}}',
+        "color": '{{item.variant.option1}}',
+        "size":'{{item.variant.option2}}',
+        "product_image_url": '{{ item.image | img_url: '300x'}}'
+      },
+      "quantity":'{{item.quantity}}',
+      "subtotal":parseFloat('{{item.line_price | money_with_currency}}'.split(currencyRe)[4])
+  },
+  {%endfor%}
+];
+
+var transaction={
+  "order_id":'{{checkout.id}}',
+  "currency": 'USD',
+  "total":"{{ checkout.total_price | money_without_currency }}",
+  "line_items": orderItems
+};
+
+dataLayer = [{
+  'page': {
+    'type': {%if checkout.id %}'confirmation'{%else%}'{{template.name}}'{%endif%},
+    'breadcrumb': breadcrumb
+  },
+  'user': user,
+  'product': product,
+  "basket": basket,
+  "listing": listing,
+  "transaction": transaction
+}];
+</script>
